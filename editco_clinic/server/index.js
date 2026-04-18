@@ -13,17 +13,29 @@ app.use(express.json());
 const PORT = process.env.PORT || 5001;
 const MONGO_URI = process.env.MONGO_URI;
 
-if (!MONGO_URI) {
-  console.error("FATAL ERROR: MONGO_URI is missing in .env");
-  process.exit(1);
-}
+// Connection state caching
+let isConnected = false;
 
-mongoose.connect(MONGO_URI)
-  .then(() => console.log("Connected to MongoDB Server"))
-  .catch((err) => console.error("MongoDB connection error:", err));
+const connectToDatabase = async () => {
+  if (isConnected) return;
+
+  if (!MONGO_URI) {
+    throw new Error("MONGO_URI is missing in environment variables");
+  }
+
+  try {
+    const db = await mongoose.connect(MONGO_URI);
+    isConnected = db.connections[0].readyState;
+    console.log("Connected to MongoDB via Serverless Wrapper");
+  } catch (err) {
+    console.error("MongoDB connection error:", err);
+    throw err;
+  }
+};
 
 app.post("/api/contact", async (req, res) => {
   try {
+    await connectToDatabase();
     const { name, phone, email, service, date, time } = req.body;
     
     // Simple validation
@@ -50,6 +62,7 @@ app.post("/api/contact", async (req, res) => {
 
 app.get("/api/submissions", async (req, res) => {
   try {
+    await connectToDatabase();
     // Sort by newest first
     const submissions = await Submission.find().sort({ createdAt: -1 });
     res.status(200).json(submissions);
